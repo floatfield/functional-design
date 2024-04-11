@@ -74,7 +74,10 @@ object input_stream:
       * second input stream.
       */
     def orElse(that: => IStream): IStream =
-      IStream.suspend(IStream(() => createInputStream())).orElse(that)
+      IStream(() =>
+        try createInputStream()
+        catch case _: Throwable => that.createInputStream()
+      )
 
     /** EXERCISE 3
       *
@@ -101,7 +104,7 @@ object input_stream:
     * the data comes from, everything should be buffered.
     */
   lazy val allData: IStream =
-    primary.orElse(fragments.fold(IStream.empty)(_ ++ _)).map(_.buffered)
+    primary.orElse(fragments.fold(IStream.empty)(_ ++ _)).buffered
 
   lazy val primary: IStream         = ???
   lazy val fragments: List[IStream] = ???
@@ -159,7 +162,7 @@ object email_filter:
     */
   lazy val emailFilter1 = EmailFilter.subjectContains("discount") && EmailFilter.bodyContains(
     "N95"
-  ) && EmailFilter.recipientIs(Address("john@doe.com")).unary_!
+  ) && !EmailFilter.recipientIs(Address("john@doe.com"))
 end email_filter
 
 /** DATA TRANSFORM - EXERCISE SET 3
@@ -299,21 +302,32 @@ object contact_processing:
       * second schema mapping fails, then the result must also fail. Only if both schema mappings
       * succeed can the resulting schema mapping succeed.
       */
-    def +(that: SchemaMapping): SchemaMapping = ???
+    def +(that: SchemaMapping): SchemaMapping =
+      SchemaMapping(contact => map(contact).flatMap(that.map))
 
     /** EXERCISE 2
       *
       * Add an `orElse` operator that combines two schema mappings into one, applying the effects of
       * the first one, unless it fails, and in that case, applying the effects of the second one.
       */
-    def orElse(that: SchemaMapping): SchemaMapping = ???
+    def orElse(that: SchemaMapping): SchemaMapping =
+      SchemaMapping(contact => map(contact).orElse(that.map(contact)))
 
     /** EXERCISE 3
       *
       * Add an `protect` operator that returns a new schema mapping that preserve the specified
       * column names & their original values in the final result.
       */
-    def protect(columnNames: Set[String]): SchemaMapping = ???
+    def protect(columnNames: Set[String]): SchemaMapping = SchemaMapping(csv =>
+      self
+        .map(csv)
+        .map(contact =>
+          columnNames.foldLeft(contact)((resultCSV, name) =>
+            csv.get(name).fold(resultCSV)(column => resultCSV.add(name, column))
+          )
+        )
+    )
+
   end SchemaMapping
   object SchemaMapping:
 
@@ -354,7 +368,12 @@ object contact_processing:
     * schema for contacts, by composing schema mappings constructed from constructors and composed &
     * transformed operators.
     */
-  lazy val schemaMapping: SchemaMapping = ???
+  lazy val schemaMapping: SchemaMapping =
+    SchemaMapping.rename("email", "email_address") +
+      SchemaMapping.combine("fname", "lname")("full_name")(_ ++ " " ++ _) +
+      SchemaMapping.relocate("full_name", 0) +
+      SchemaMapping.rename("street", "street_address") +
+      SchemaMapping.rename("postal", "postal_code")
 
   val UserUploadSchema: SchemaCSV =
     SchemaCSV(List("email", "fname", "lname", "country", "street", "postal"))
@@ -396,7 +415,10 @@ object ui_events:
       * Add a method `+` that composes two listeners into a single listener, by sending each game
       * event to both listeners.
       */
-    def +(that: Listener): Listener = ???
+    def +(that: Listener): Listener = Listener { event =>
+      self.onEvent(event)
+      that.onEvent(event)
+    }
 
     /** EXERCISE 2
       *
@@ -404,21 +426,33 @@ object ui_events:
       * game event to either the left listener, if it does not throw an exception, or the right
       * listener, if the left throws an exception.
       */
-    def orElse(that: Listener): Listener = ???
+    def orElse(that: Listener): Listener = Listener(event =>
+      try self.onEvent(event)
+      catch case _: Throwable => that.onEvent(event)
+    )
 
     /** EXERCISE 3
       *
       * Add a `runOn` operator that returns a Listener that will call this one's `onEvent` callback
       * on the specified `ExecutionContext`.
       */
-    def runOn(ec: scala.concurrent.ExecutionContext): Listener = ???
+    def runOn(ec: scala.concurrent.ExecutionContext): Listener =
+      Listener { event =>
+        val r = new Runnable:
+          override def run() =
+            self.onEvent(event)
+        ec.execute(r)
+      }
 
     /** EXERCISE 4
       *
       * Add a `debug` unary operator that will call the `onEvent` callback, but before it does, it
       * will print out the game event to the console.
       */
-    def debug: Listener = ???
+    def debug: Listener = Listener { event =>
+      println(event)
+      self.onEvent(event)
+    }
   end Listener
 
   /** EXERCISE 5
@@ -427,7 +461,9 @@ object ui_events:
     * game event, making the gfxUpdateListener run on the `uiExecutionContext`, and debugging the
     * input events.
     */
-  lazy val solution = ???
+  lazy val solution = (twinkleAnimationListener + motionDetectionListener + gfxUpdateListener.runOn(
+    uiExecutionContext
+  )).debug
 
   lazy val twinkleAnimationListener: Listener = ???
   lazy val motionDetectionListener: Listener  = ???
