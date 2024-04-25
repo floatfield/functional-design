@@ -606,5 +606,15 @@ object education:
     * bonus points.
     */
   lazy val exampleQuiz: Quiz =
-    Quiz(Question.TrueFalse("Is coffee the best hot beverage on planet earth?", Checker.isTrue(10)))
+    Quiz(
+      Question.TrueFalse("Is coffee the best hot beverage on planet earth?", Checker.isTrue(10))
+    ) +
+      Quiz(Question.Text("foo", Checker.isText(3)("foo"))) +
+      Quiz(Question.Text("foo", Checker.isText(3)("foo"))) +
+      Quiz(Question.Text("foo", Checker.isText(3)("foo"))) +
+      Quiz(Question.Text("foo", Checker.isText(10)("foo"))).bonus
+        .check(res => res.wrongPoints > 0)(
+          Quiz.empty,
+          Quiz(Question.Text("foo", Checker.isText(1)("foo"))).bonus
+        )
 end education

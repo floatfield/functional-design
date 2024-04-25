@@ -1,5 +1,7 @@
 package net.degoes
 
+import java.io.File
+
 /*
  * INTRODUCTION
  *
@@ -55,7 +57,7 @@ object spreadsheet:
     * Design a data type called `CalculatedValue`, which represents a `Value` that is dynamically
     * computed from a `Spreadsheet`.
     */
-  final case class CalculatedValue( /* ??? */ ):
+  final case class CalculatedValue(run: Spreadsheet => Value):
     self =>
 
     /** EXERCISE 2
@@ -63,25 +65,39 @@ object spreadsheet:
       * Add an operator that returns a new `CalculatedValue` that is the negated version of this
       * one.
       */
-    def unary_- : CalculatedValue = ???
+
+    def unary_- : CalculatedValue = CalculatedValue(
+      self.run(_) match
+        case Value.Dbl(value)     => Value.Dbl(-value)
+        case Value.Str(value)     => Value.Error("False negation of string")
+        case Value.Error(message) => Value.Error(s"False negation of error $message")
+    )
 
     /** EXERCISE 3
       *
       * Add a binary operator `+` that returns a new `CalculatedValue` that is the sum of the two
       * calculated values.
       */
-    def +(that: CalculatedValue): CalculatedValue = ???
+    def +(that: CalculatedValue): CalculatedValue = binaryOp(that)("Incompatible arguments of sum"):
+      case (Value.Dbl(value1), Value.Dbl(value2)) => Value.Dbl(value1 + value2)
+      case (Value.Str(value1), Value.Str(value2)) => Value.Str(value1 ++ value2)
 
     /** EXERCISE 4
       *
       * Add a binary operator `-` that returns a new `CalculatedValue` that is the difference of the
       * two calculated values.
       */
-    def -(that: CalculatedValue): CalculatedValue = ???
+    def -(that: CalculatedValue): CalculatedValue =
+      binaryOp(that)("Incompatible arguments of diff"):
+        case (Value.Dbl(value1), Value.Dbl(value2)) => Value.Dbl(value1 - value2)
 
     protected def binaryOp(that: CalculatedValue)(error: String)(
       f: PartialFunction[(Value, Value), Value]
-    ): CalculatedValue = ???
+    ): CalculatedValue =
+      CalculatedValue(spreadsheet =>
+        f.lift(self.run(spreadsheet), that.run(spreadsheet)).getOrElse(Value.Error(error))
+      )
+
   end CalculatedValue
   object CalculatedValue:
 
@@ -89,20 +105,21 @@ object spreadsheet:
       *
       * Add a constructor that makes an `CalculatedValue` from a `Value`.
       */
-    def const(contents: Value): CalculatedValue = ???
+    def const(contents: Value): CalculatedValue = CalculatedValue(_ => contents)
 
     /** EXERCISE 6
       *
       * Add a constructor that provides access to the value of the specified cell, identified by
       * col/row.
       */
-    def at(col: Int, row: Int): CalculatedValue = ???
+    def at(col: Int, row: Int): CalculatedValue =
+      CalculatedValue(spreadsheet => spreadsheet.valueAt(col, row).run(spreadsheet))
 
   /** EXERCISE 7
     *
     * Describe a cell whose contents are the sum of the cells at (0, 0) and (1, 0).
     */
-  lazy val cell1: Cell = ???
+  lazy val cell1: Cell = Cell(1, 1, CalculatedValue.at(0, 1) + CalculatedValue.at(0, 0))
 end spreadsheet
 
 /** ETL - EXERCISE SET 2
@@ -167,7 +184,15 @@ object etl:
     * Also mock out, but do not implement, a method on each repository type called `load`, which
     * returns a `DataStream`.
     */
-  type DataRepo
+  sealed trait DR:
+    def mkSink(s: DataStream): Unit
+    def load: DataStream
+
+  enum DataRepo:
+    case Ftp
+    case Url
+    case S3
+    case Jdbc
 
   enum FileFormat:
     case Json
