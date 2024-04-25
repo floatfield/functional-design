@@ -507,7 +507,14 @@ object education:
       *
       * Add a `+` operator that combines this quiz result with the specified quiz result.
       */
-    def +(that: QuizResult): QuizResult = ???
+    def +(that: QuizResult): QuizResult =
+      QuizResult(
+        self.correctPoints + that.correctPoints,
+        self.bonusPoints + that.bonusPoints,
+        self.wrongPoints + that.wrongPoints,
+        self.wrong :++ that.wrong
+      )
+  end QuizResult
   object QuizResult:
 
     /** An `empty` QuizResult that, when combined with any quiz result, returns that same quiz
@@ -522,13 +529,13 @@ object education:
       *
       * Add an operator `+` that appends this quiz to the specified quiz.
       */
-    def +(that: Quiz): Quiz = ???
+    def +(that: Quiz): Quiz = Quiz(() => self.run() + that.run())
 
     /** EXERCISE 3
       *
       * Add a unary operator `bonus` that marks this quiz as a bonus quiz.
       */
-    def bonus: Quiz = ???
+    def bonus: Quiz = Quiz(() => self.run().toBonus)
 
     /** EXERCISE 4
       *
@@ -536,7 +543,8 @@ object education:
       * quiz, and if it returns true, will execute the `ifPass` quiz afterward; but otherwise, will
       * execute the `ifFail` quiz.
       */
-    def check(f: QuizResult => Boolean)(ifPass: Quiz, ifFail: Quiz): Quiz = ???
+    def check(f: QuizResult => Boolean)(ifPass: Quiz, ifFail: Quiz): Quiz =
+      if (f(self.run())) ifPass else ifFail
   end Quiz
   object Quiz:
     private def grade[A](f: String => A, checker: Checker[A]): QuizResult =
