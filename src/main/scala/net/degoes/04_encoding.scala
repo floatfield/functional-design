@@ -1,5 +1,7 @@
 package net.degoes
 
+import net.degoes.education_executable.Quiz2
+
 /*
  * INTRODUCTION
  *
@@ -62,7 +64,9 @@ object education_executable:
   import education.*
 
   enum Quiz2:
-    case Dummy
+    case Value[A](question: Question[A])
+    case Plus(q1: Quiz2, q2: Quiz2)
+    case Bonus(q: Quiz2)
 
     def self = this
 
@@ -71,23 +75,53 @@ object education_executable:
       * Add an operator `+` that appends this quiz to the specified quiz. Model this as pure data
       * using a constructor for Quiz in the companion object.
       */
-    def +(that: Quiz2): Quiz2 = ???
+    def +(that: Quiz2): Quiz2 = Quiz2.Plus(that, self)
 
     /** EXERCISE 2
       *
       * Add a unary operator `bonus` that marks this quiz as a bonus quiz. Model this as pure data
       * using a constructor for Quiz in the companion object.
       */
-    def bonus: Quiz2 = ???
+    def bonus: Quiz2 = Quiz2.Bonus(self)
+  end Quiz2
   object Quiz2:
     def apply[A](question: Question[A]): Quiz2 = ???
+
+  private def grade[A](f: String => A, checker: Checker[A]): QuizResult =
+    scala.util.Try {
+      val submittedAnswer = f(scala.io.StdIn.readLine())
+
+      checker.isCorrect(submittedAnswer) match
+        case Left(string)  => QuizResult(0, 0, checker.points, Vector(string))
+        case Right(string) => QuizResult(checker.points, 0, 0, Vector.empty)
+    }.getOrElse(
+      QuizResult(0, 0, checker.points, Vector("The format of your answer was not recognized"))
+    )
 
   /** EXERCISE 3
     *
     * Implement an interpreter for the `Quiz` model that translates it into the interactive console
     * operations that it describes, returning a QuizResult value.
     */
-  def run(quiz: Quiz2): QuizResult = ???
+  def run(quiz: Quiz2): QuizResult = quiz match
+    case Quiz2.Value(question) =>
+      import Question.*
+
+      println(question.question)
+
+      question match
+        case Text(question, checker)                    => grade(identity(_), checker)
+        case MultipleChoice(question, choices, checker) =>
+          val choicePrintout =
+            choices.zipWithIndex.map { case (c, i) => s"${i}. ${c}" }.mkString("\n")
+
+          println("Your options are: \n" + choicePrintout)
+
+          grade(_.toInt, checker)
+        case TrueFalse(question, checker)               => grade(_.toLowerCase().startsWith("t"), checker)
+    case Quiz2.Bonus(q)        => run(q).toBonus
+    case Quiz2.Plus(q1, q2)    => run(q1) + run(q2)
+
 end education_executable
 
 /** DATA TRANSFORM - EXERCISE SET 2
@@ -98,14 +132,18 @@ object contact_processing2:
   import contact_processing.*
 
   enum SchemaMapping2:
-    case Dummy
+    case Add(scheme1: SchemaMapping2, scheme2: SchemaMapping2)
+    case Else(rightScheme: SchemaMapping2, leftScheme: SchemaMapping2)
+    case Rename(oldName: String, newName: String)
+    case Delete(name: String)
+    def self = this
 
     /** EXERCISE 1
       *
       * Add a `+` operator that models combining two schema mappings into one, applying the effects
       * of both in sequential order.
       */
-    def +(that: SchemaMapping2): SchemaMapping2 = ???
+    def +(that: SchemaMapping2): SchemaMapping2 = Add(that, self)
 
     /** EXERCISE 2
       *
@@ -113,27 +151,39 @@ object contact_processing2:
       * effects of the first one, unless it fails, and in that case, applying the effects of the
       * second one.
       */
-    def orElse(that: SchemaMapping2): SchemaMapping2 = ???
+    def orElse(that: SchemaMapping2): SchemaMapping2 = Else(self, that)
+  end SchemaMapping2
   object SchemaMapping2:
 
     /** EXERCISE 3
       *
       * Add a constructor for `SchemaMapping` models renaming the column name.
       */
-    def rename(oldName: String, newName: String): SchemaMapping2 = ???
+    def rename(oldName: String, newName: String): SchemaMapping2 = Rename(oldName, newName)
 
     /** EXERCISE 4
       *
       * Add a constructor for `SchemaMapping` that models deleting the column of the specified name.
       */
-    def delete(name: String): SchemaMapping2 = ???
+    def delete(name: String): SchemaMapping2 = Delete(name)
 
   /** EXERCISE 5
     *
     * Implement an interpreter for the `SchemaMapping` model that translates it into into changes on
     * the contact list.
     */
-  def run(mapping: SchemaMapping2, contacts: ContactsCSV): MappingResult[ContactsCSV] = ???
+  def run(mapping: SchemaMapping2, contacts: ContactsCSV): MappingResult[ContactsCSV] =
+    mapping match
+      case SchemaMapping2.Rename(oldName, newName) =>
+        MappingResult.Success(contacts.rename(oldName, newName), Nil)
+      case SchemaMapping2.Delete(name)             =>
+        MappingResult.Success(contacts.delete(name), Nil)
+      case SchemaMapping2.Add(scheme1, scheme2)    =>
+        run(mapping = scheme1, contacts = contacts).flatMap(result1 =>
+          run(mapping = scheme2, contacts = result1)
+        )
+      case SchemaMapping2.Else(that, other)        =>
+        run(mapping = that, contacts = contacts).orElse(run(mapping = other, contacts = contacts))
 
   /** BONUS EXERCISE
     *
@@ -141,7 +191,17 @@ object contact_processing2:
     * schema mapping in cases where doing so wouldn't later the result.
     */
   def optimize(schemaMapping: SchemaMapping2): SchemaMapping2 =
-    ???
+    schemaMapping match
+      case SchemaMapping2.Add(scheme1, scheme2)         => ???
+      case SchemaMapping2.Else(rightScheme, leftScheme) => ???
+      case SchemaMapping2.Rename(oldName, newName)      => ???
+      case SchemaMapping2.Delete(name)                  => ???
+
+  val m =
+    delete("foo") + rename(
+      "bar",
+      "foo"
+    ) // Add(Add(Delete("foo"), Rename("bar", "foo")), Delete("bar"))
 end contact_processing2
 
 /** EMAIL CLIENT - EXERCISE SET 3
