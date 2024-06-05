@@ -1,6 +1,7 @@
 package net.degoes
 
 import net.degoes.education_executable.Quiz2
+import net.degoes.email_filter2.EmailFilter.subjectContains
 
 /*
  * INTRODUCTION
@@ -197,11 +198,11 @@ object contact_processing2:
       case SchemaMapping2.Rename(oldName, newName)      => ???
       case SchemaMapping2.Delete(name)                  => ???
 
-  val m =
-    delete("foo") + rename(
-      "bar",
-      "foo"
-    ) // Add(Add(Delete("foo"), Rename("bar", "foo")), Delete("bar"))
+  // val m =
+  //   delete("foo") + rename(
+  //     "bar",
+  //     "foo"
+  //   ) // Add(Add(Delete("foo"), Rename("bar", "foo")), Delete("bar"))
 end contact_processing2
 
 /** EMAIL CLIENT - EXERCISE SET 3
@@ -214,7 +215,13 @@ object email_filter2:
   final case class Email(sender: Address, to: List[Address], subject: String, body: String)
 
   enum EmailFilter:
-    case Dummy
+    case And(filter1: EmailFilter, filter2: EmailFilter)
+    case Or(filter1: EmailFilter, filter2: EmailFilter)
+    case Not(filter: EmailFilter)
+    case BodyContains(subString: String)
+    case SubjectContains(subString: String)
+    case RecipientIn(reciepients: Set[Address])
+    case SenderIn(senders: Set[Address])
 
     def self = this
 
@@ -223,21 +230,21 @@ object email_filter2:
       * Add an "and" operator that models matching an email if both the first and the second email
       * filter match the email.
       */
-    def &&(that: EmailFilter): EmailFilter = ???
+    def &&(that: EmailFilter): EmailFilter = And(self, that)
 
     /** EXERCISE 2
       *
       * Add an "or" operator that models matching an email if either the first or the second email
       * filter match the email.
       */
-    def ||(that: EmailFilter): EmailFilter = ???
+    def ||(that: EmailFilter): EmailFilter = Or(self, that)
 
     /** EXERCISE 3
       *
       * Add a "negate" operator that models matching an email if this email filter does NOT match an
       * email.
       */
-    def negate: EmailFilter = ???
+    def negate: EmailFilter = Not(self)
   end EmailFilter
   object EmailFilter:
 
@@ -246,28 +253,28 @@ object email_filter2:
       * Add a constructor for `EmailFilter` that models looking to see if the subject of an email
       * contains the specified word.
       */
-    def subjectContains(string: String): EmailFilter = ???
+    def subjectContains(string: String): EmailFilter = SubjectContains(string)
 
     /** EXERCISE 5
       *
       * Add a constructor for `EmailFilter` that models looking to see if the body of an email
       * contains the specified word.
       */
-    def bodyContains(string: String): EmailFilter = ???
+    def bodyContains(string: String): EmailFilter = BodyContains(string)
 
     /** EXERCISE 6
       *
       * Add a constructor for `EmailFilter` that models looking to see if the sender of an email is
       * in the specified set of senders.
       */
-    def senderIn(senders: Set[Address]): EmailFilter = ???
+    def senderIn(senders: Set[Address]): EmailFilter = SenderIn(senders)
 
     /** EXERCISE 7
       *
       * Add a constructor for `EmailFilter` that models looking to see if the recipient of an email
       * is in the specified set of recipients.
       */
-    def recipientIn(recipients: Set[Address]): EmailFilter = ???
+    def recipientIn(recipients: Set[Address]): EmailFilter = RecipientIn(recipients)
   end EmailFilter
 
   /** EXERCISE 8
@@ -276,13 +283,29 @@ object email_filter2:
     * specified email.
     */
   def matches(filter: EmailFilter, email: Email): Boolean =
-    ???
+    filter match
+      case EmailFilter.And(filter1, filter2)    => matches(filter1, email) && matches(filter2, email)
+      case EmailFilter.Or(filter1, filter2)     => matches(filter1, email) || matches(filter2, email)
+      case EmailFilter.Not(notFilter)           => !matches(notFilter, email)
+      case EmailFilter.SubjectContains(string)  => email.subject.contains(string)
+      case EmailFilter.BodyContains(string)     => email.body.contains(string)
+      case EmailFilter.SenderIn(senders)        => senders.contains(email.sender)
+      case EmailFilter.RecipientIn(reciepients) => reciepients.intersect(email.to.toSet).nonEmpty
+
+  val f = EmailFilter.And(EmailFilter.bodyContains("foo"), EmailFilter.bodyContains("bar"))
 
   /** EXERCISE 9
     *
     * Implement a function to make an English-readable description of an `EmailFilter`.
     */
-  def describe(filter: EmailFilter): Unit = ???
+  def describe(filter: EmailFilter): Unit = filter match
+    case EmailFilter.And(filter1, filter2) => 
+      print("(")
+      describe(filter1)
+      print(" and ")
+      describe(filter2)
+      print(")")
+      // ...
 end email_filter2
 
 /** SPREADSHEET - EXERCISE SET 4
@@ -328,7 +351,10 @@ object spreadsheet2:
     case Dbl(value: Double)
 
   enum CalculatedValue:
-    case Dummy
+    case Sum(value1: CalculatedValue, value2: CalculatedValue)
+    case Not(value: CalculatedValue)
+    case Const(contents: Value)
+    case At(col: Int, row: Int)
 
     def self = this
 
@@ -337,35 +363,69 @@ object spreadsheet2:
       * Add some operators to transform one `CalculatedValue` into another `CalculatedValue`. For
       * example, one operator could "negate" a double CalculatedValue.
       */
-    def negate: CalculatedValue = ???
+    def negate: CalculatedValue = Not(self)
 
     /** EXERCISE 2
       *
       * Add some operators to combine `CalculatedValue`. For example, one operator could sum two
       * double CalculatedValueessions.
       */
-    def sum(that: CalculatedValue): CalculatedValue = ???
+    def sum(that: CalculatedValue): CalculatedValue = Sum(self, that)
   object CalculatedValue:
 
     /** EXERCISE 3
       *
       * Add a constructor that makes an CalculatedValue from a Value.
       */
-    def const(contents: Value): CalculatedValue = ???
+    def const(contents: Value): CalculatedValue = Const(contents)
 
     /** EXERCISE 4
       *
       * Add a constructor that provides access to the value of the specified cell, identified by
       * col/row.
       */
-    def at(col: Int, row: Int): CalculatedValue = ???
+    def at(col: Int, row: Int): CalculatedValue = At(col, row)
+
+  // val cv: CalculatedValue = CalculatedValue.const(Value.Dbl(1.0)).sum(CalculatedValue.at(3, 2))
+
+  // val ss = new SpreadSheet {
+  //   val rows = 10
+  //   val cols = 10
+  //   def valueAt(3, 2) = CalculatedValue.const(Value.Dbl(3.0))
+  // }
+
+  // val nv = CalculatedValue.at(3, 2).negate // Not(At(3, 2))
+
+  // val x = evaluate(ss, Cell(4, 4, nv))
 
   /** EXERCISE 5
     *
     * Implement an interpreter for the `Value.CalculatedValue` model that translates it into static
     * cell contents by evaluating the CalculatedValueession.
     */
-  def evaluate(spreadsheet: Spreadsheet, cell: Cell): Value = ???
+  def negateValue(value: Value): Value = value match
+    case Value.Error(message) => Value.Error(message)
+    case Value.Str(value) => Value.Str(value.reverse)
+    case Value.Dbl(value) => Value.Dbl(-value)
+  
+  def sumValue(value1: Value, value2: Value): Value = (value1, value2) match 
+    case (Value.Error(message1), Value.Error(message2)) => Value.Error(message1 ++ " and " ++ message2)
+    case (Value.Str(message1), Value.Str(message2)) => Value.Str(message1 ++ message2)
+    case (Value.Dbl(value1), Value.Dbl(value2)) => Value.Dbl(value1 + value2)
+    case _ => Value.Error("incomoapfmiamgpa")
+  
+  def evaluate(spreadsheet: Spreadsheet, cell: Cell): Value = cell.contents match
+    case CalculatedValue.Sum(value1, value2) =>
+      sumValue(
+        evaluate(spreadsheet, cell.copy(contents = value1)),
+        evaluate(spreadsheet, cell.copy(contents = value2))
+      )
+    case CalculatedValue.Not(value) =>
+      negateValue(evaluate(spreadsheet, cell.copy(contents = value)))
+    case CalculatedValue.Const(contents) =>
+      contents
+    case CalculatedValue.At(col, row) =>
+      evaluate(spreadsheet, Cell(col, row, spreadsheet.valueAt(col, row)))
 end spreadsheet2
 
 /** E-COMMERCE MARKETING - GRADUATION PROJECT
