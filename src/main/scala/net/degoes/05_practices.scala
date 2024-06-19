@@ -1,5 +1,7 @@
 package net.degoes
 
+import scala.math.{ cos, sin }
+
 /*
  * INTRODUCTION
  *
@@ -50,53 +52,51 @@ object email_filter3:
     */
   enum EmailFilter:
     case Always
-    case Never
     case And(left: EmailFilter, right: EmailFilter)
     case InclusiveOr(left: EmailFilter, right: EmailFilter)
-    case ExclusiveOr(left: EmailFilter, right: EmailFilter)
-    case SenderEquals(target: Address)
-    case SenderNotEquals(target: Address)
     case RecipientEquals(target: Address)
-    case RecipientNotEquals(target: Address)
     case SenderIn(targets: Set[Address])
-    case RecipientIn(targets: Set[Address])
     case BodyContains(phrase: String)
-    case BodyNotContains(phrase: String)
     case SubjectContains(phrase: String)
-    case SubjectNotContains(phrase: String)
+    case Not(filter: EmailFilter)
 
     def self = this
 
     def &&(that: EmailFilter): EmailFilter = EmailFilter.And(self, that)
 
-    def ||(that: EmailFilter): EmailFilter = EmailFilter.InclusiveOr(self, that)
+    def ^^(that: EmailFilter): EmailFilter =
+      EmailFilter.InclusiveOr(
+        EmailFilter.And(self, EmailFilter.Not(that)),
+        EmailFilter.And(that, EmailFilter.Not(self))
+      )
 
-    def ^^(that: EmailFilter): EmailFilter = EmailFilter.ExclusiveOr(self, that)
+    def ||(that: EmailFilter): EmailFilter = EmailFilter.InclusiveOr(self, that)
   end EmailFilter
   object EmailFilter:
     val always: EmailFilter = Always
 
-    val never: EmailFilter = Never
+    val never: EmailFilter = EmailFilter.Not(Always)
 
-    def senderIs(sender: Address): EmailFilter = SenderEquals(sender)
+    def senderIs(sender: Address): EmailFilter = SenderIn(Set(sender))
 
-    def senderIsNot(sender: Address): EmailFilter = SenderNotEquals(sender)
+    def senderIsNot(sender: Address): EmailFilter = Not(SenderIn(Set(sender)))
 
     def recipientIs(recipient: Address): EmailFilter = RecipientEquals(recipient)
 
-    def recipientIsNot(recipient: Address): EmailFilter = RecipientNotEquals(recipient)
+    def recipientIsNot(recipient: Address): EmailFilter = Not(RecipientEquals(recipient))
 
     def senderIn(senders: Set[Address]): EmailFilter = SenderIn(senders)
 
-    def recipientIn(recipients: Set[Address]): EmailFilter = RecipientIn(recipients)
+    def recipientIn(recipients: Set[Address]): EmailFilter =
+      recipients.foldLeft(never)((res, recipient) => RecipientEquals(recipient) || res)
 
     def bodyContains(phrase: String): EmailFilter = BodyContains(phrase)
 
-    def bodyDoesNotContain(phrase: String): EmailFilter = BodyNotContains(phrase)
+    def bodyDoesNotContain(phrase: String): EmailFilter = Not(BodyContains(phrase))
 
     def subjectContains(phrase: String): EmailFilter = SubjectContains(phrase)
 
-    def subjectDoesNotContain(phrase: String): EmailFilter = SubjectNotContains(phrase)
+    def subjectDoesNotContain(phrase: String): EmailFilter = Not(SubjectContains(phrase))
   end EmailFilter
 end email_filter3
 
@@ -104,12 +104,50 @@ end email_filter3
   */
 object ui_components:
 
+  val r = 10
+
   object executable:
     /** EXERCISE 1
       *
       * The following API is not composable—there is no domain. Introduce a domain with elements,
       * constructors, and composable operators. Use an executable model.
       */
+
+    trait DrawApi:
+      def draw(x: Coord, y: Coord): Unit
+
+    final case class Coord(x: Double, y: Double)
+
+    final case class TurtleState(point: Coord, alphaTurn: Int, isDrawing: Boolean)
+
+    case class TurtleExec(run: TurtleState => TurtleState)(using api: DrawApi):
+      def andThen(that: TurtleExec): TurtleExec = TurtleExec { state =>
+        that.run(run(state))
+      }
+      def turnLeft(degrees: Int): TurtleExec    = TurtleExec { state =>
+        state.copy(alphaTurn = (state.alphaTurn - degrees) % 360)
+      }
+
+      def goForward(): TurtleExec = TurtleExec { state =>
+        val newState = state.copy(point =
+          Coord(state.point.x + r * cos(state.alphaTurn), state.point.y + r * sin(state.alphaTurn))
+        )
+        if state.isDrawing then api.draw(state.point, newState.point)
+        newState
+      }
+
+    object TurtleExec:
+      def init(using api: DrawApi): TurtleExec = TurtleExec(identity)
+
+    class DrawApiImpl extends DrawApi:
+      override def draw(x: Coord, y: Coord): Unit = ()
+
+    val x = TurtleExec.init(using DrawApiImpl())
+
+    val transformation = x.turnLeft(30).goForward().turnLeft(20).turnLeft(50)
+    val y              = transformation.andThen(transformation)
+    y.run(TurtleState(Coord(0, 3), 0, false))
+
     trait Turtle:
       self =>
       def turnLeft(degrees: Int): Unit
@@ -121,6 +159,7 @@ object ui_components:
       def goBackward(): Unit
 
       def draw(): Unit
+  end executable
 
   object declarative:
     /** EXERCISE 2
