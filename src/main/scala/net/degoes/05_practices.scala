@@ -1,6 +1,7 @@
 package net.degoes
 
 import scala.math.{ cos, sin }
+import net.degoes.ui_components.executable.TurtleExec
 
 /*
  * INTRODUCTION
@@ -173,9 +174,79 @@ object ui_components:
 
       def turnRight(degrees: Int): Unit
 
-      def goForward(): Unit
+      def goForward(distance: Int): Unit
 
-      def goBackward(): Unit
+      def goBackward(distance: Int): Unit
 
       def draw(): Unit
+
+    enum ComposableTurtle:
+      case Turn(degrees: Int)
+      case Go(distance: Int)
+      case Draw
+      case AndThen(turtle1: ComposableTurtle, turtle2: ComposableTurtle)
+      case NoOps
+
+      def self = this
+
+      def turnLeft(degrees: Int): ComposableTurtle = Turn(degrees)
+
+      def turnRight(degrees: Int): ComposableTurtle = Turn(-degrees)
+
+      def goForward(distance: Int): ComposableTurtle = Go(distance)
+
+      def goBackward(distance: Int): ComposableTurtle = Go(-distance)
+
+      def draw(): ComposableTurtle = Draw
+
+      def andThen(that: ComposableTurtle): ComposableTurtle = AndThen(self, that)
+    end ComposableTurtle
+
+    object ComposableTurtle:
+      def noOp: ComposableTurtle = ComposableTurtle.NoOps
+
+    case class Line(p1: Coord, p2: Coord)
+
+    final case class Coord(x: Double, y: Double)
+
+    final case class TurtleState(point: Coord, alphaTurn: Int, isDrawing: Boolean)
+
+    object TurtleState:
+      val init: TurtleState = TurtleState(Coord(0, 0), 0, false)
+
+    // def runTurtle1(t: ComposableTurtle): Unit         = ???
+    def runTurtle(t: ComposableTurtle): Vector[Line] =
+      def nextCoord(state: TurtleState, r: Int): Coord =
+        Coord(state.point.x + r * cos(state.alphaTurn), state.point.y + r * sin(state.alphaTurn))
+      def run(
+        t: ComposableTurtle,
+        s: TurtleState,
+        lines: Vector[Line]
+      ): (Vector[Line], TurtleState) =
+        t match
+          case ComposableTurtle.Draw                      => (lines, s.copy(isDrawing = !s.isDrawing))
+          case ComposableTurtle.Go(distance)              =>
+            val nextCoordinate = nextCoord(s, distance)
+            val newLines       = if s.isDrawing then lines :+ Line(s.point, nextCoordinate) else lines
+            (newLines, s.copy(point = nextCoordinate))
+          case ComposableTurtle.Turn(degrees)             =>
+            (lines, s.copy(alphaTurn = (s.alphaTurn + degrees) % 360))
+          case ComposableTurtle.NoOps                     => (lines, s)
+          case ComposableTurtle.AndThen(turtle1, turtle2) =>
+            val (newLines, newState) = run(turtle1, s, lines)
+            run(turtle2, newState, newLines)
+      run(t, TurtleState.init, Vector.empty)._1
+    end runTurtle
+
+    val x              = ComposableTurtle.noOp
+    val transformation = x.turnLeft(30).goForward(10).turnLeft(20).turnLeft(50)
+    val y              = transformation.andThen(transformation)
+    val res            = runTurtle(y)
+
+    val x1 = ComposableTurtle.noOp
+    val x2 = ComposableTurtle.noOp
+
+    val y1 = x1.turnLeft(30).andThen(x2)
+
+  end declarative
 end ui_components
