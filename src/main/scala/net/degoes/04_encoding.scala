@@ -2,6 +2,7 @@ package net.degoes
 
 import net.degoes.education_executable.Quiz2
 import net.degoes.email_filter2.EmailFilter.subjectContains
+import net.degoes.ecommerce_marketing.abstract_encoding.HistoryPattern
 
 /*
  * INTRODUCTION
@@ -299,13 +300,13 @@ object email_filter2:
     * Implement a function to make an English-readable description of an `EmailFilter`.
     */
   def describe(filter: EmailFilter): Unit = filter match
-    case EmailFilter.And(filter1, filter2) => 
+    case EmailFilter.And(filter1, filter2) =>
       print("(")
       describe(filter1)
       print(" and ")
       describe(filter2)
       print(")")
-      // ...
+    // ...
 end email_filter2
 
 /** SPREADSHEET - EXERCISE SET 4
@@ -371,6 +372,7 @@ object spreadsheet2:
       * double CalculatedValueessions.
       */
     def sum(that: CalculatedValue): CalculatedValue = Sum(self, that)
+  end CalculatedValue
   object CalculatedValue:
 
     /** EXERCISE 3
@@ -405,26 +407,27 @@ object spreadsheet2:
     */
   def negateValue(value: Value): Value = value match
     case Value.Error(message) => Value.Error(message)
-    case Value.Str(value) => Value.Str(value.reverse)
-    case Value.Dbl(value) => Value.Dbl(-value)
-  
-  def sumValue(value1: Value, value2: Value): Value = (value1, value2) match 
-    case (Value.Error(message1), Value.Error(message2)) => Value.Error(message1 ++ " and " ++ message2)
-    case (Value.Str(message1), Value.Str(message2)) => Value.Str(message1 ++ message2)
-    case (Value.Dbl(value1), Value.Dbl(value2)) => Value.Dbl(value1 + value2)
-    case _ => Value.Error("incomoapfmiamgpa")
-  
+    case Value.Str(value)     => Value.Str(value.reverse)
+    case Value.Dbl(value)     => Value.Dbl(-value)
+
+  def sumValue(value1: Value, value2: Value): Value = (value1, value2) match
+    case (Value.Error(message1), Value.Error(message2)) =>
+      Value.Error(message1 ++ " and " ++ message2)
+    case (Value.Str(message1), Value.Str(message2))     => Value.Str(message1 ++ message2)
+    case (Value.Dbl(value1), Value.Dbl(value2))         => Value.Dbl(value1 + value2)
+    case _                                              => Value.Error("incomoapfmiamgpa")
+
   def evaluate(spreadsheet: Spreadsheet, cell: Cell): Value = cell.contents match
     case CalculatedValue.Sum(value1, value2) =>
       sumValue(
         evaluate(spreadsheet, cell.copy(contents = value1)),
         evaluate(spreadsheet, cell.copy(contents = value2))
       )
-    case CalculatedValue.Not(value) =>
+    case CalculatedValue.Not(value)          =>
       negateValue(evaluate(spreadsheet, cell.copy(contents = value)))
-    case CalculatedValue.Const(contents) =>
+    case CalculatedValue.Const(contents)     =>
       contents
-    case CalculatedValue.At(col, row) =>
+    case CalculatedValue.At(col, row)        =>
       evaluate(spreadsheet, Cell(col, row, spreadsheet.valueAt(col, row)))
 end spreadsheet2
 
@@ -494,7 +497,7 @@ object ecommerce_marketing:
     import HistoryPattern.*
     import Attribute.EventType
 
-    val example = eventType("add-item") *> eventType("abandon-cart")
+    val example = eventType("add-item").atLeast(10) *> eventType("abandon-cart").between(10, 15)
 
     def matches(history: List[Event], pattern: HistoryPattern): Boolean =
       def loop(history: List[Event], pattern: HistoryPattern): (List[Event], Boolean) =
@@ -527,11 +530,58 @@ object ecommerce_marketing:
 
   /** EXERCISE 1
     *
-    * Develop an executable encoding of the pattern matcher. Instead of having an ADT to represent a
+    * Develop an executable encoding of the pattern matcher. Instead of using an ADT to represent a
     * pattern, and then interpreting that on a user history to see if there is a match, you will
     * represent a pattern as a function or an interface that is capable of testing the user history
     * for a match.
     */
   object executable_encoding:
-    type HistoryPattern
+    import abstract_encoding.EventPattern
+    // enum HistoryPattern
+    case class HistoryPattern(run: List[Event] => (List[Event], Boolean)):
+      def *>(that: HistoryPattern): HistoryPattern                     = HistoryPattern: events =>
+        run(events) match
+          case (list, true)  => that.run(list)
+          case (list, false) => (list, false)
+      def atLeast(n: Int): HistoryPattern                              = repeat(Some(n), None)
+      def atMost(n: Int): HistoryPattern                               = repeat(None, Some(n))
+      def between(min: Int, max: Int): HistoryPattern                  = repeat(Some(min), Some(max))
+      def repeat(min0: Option[Int], max0: Option[Int]): HistoryPattern =
+        HistoryPattern: events =>
+          val min      = min0.getOrElse(0)
+          val max      = max0.getOrElse(Int.MaxValue)
+          val baseline = (0 to min).foldLeft((events, true)):
+            case ((history, false), _) => (history, false)
+            case ((history, true), _)  => run(history)
+
+          if !baseline._2 then baseline
+          else
+            val after = (0 to (max - min)).foldLeft(baseline):
+              case ((history, false), _) => (history, false)
+              case ((history, true), _)  => run(history)
+
+            (after._1, true)
+
+      def matches(events: List[Event]): Boolean = run(events)._2
+    end HistoryPattern
+
+    object HistoryPattern:
+      val matches: HistoryPattern                           = HistoryPattern(events => (events, true))
+      def event(eventPattern: EventPattern): HistoryPattern =
+        HistoryPattern:
+          case head :: next => (next, eventPattern.matches(head))
+          case Nil          => (Nil, false)
+
+      def eventType(eventType: String): HistoryPattern = event(
+        EventPattern.HasValue(Attribute.EventType, Value.Str(eventType))
+      )
+    end HistoryPattern
+
+    import HistoryPattern.*
+
+    val example             = eventType("add-item").atLeast(10) *> eventType("abandon-cart").between(10, 15)
+    val events: List[Event] = ???
+    val x                   = example.matches(events)
+    // Instead of having an ADT to represent a pattern
+  end executable_encoding
 end ecommerce_marketing

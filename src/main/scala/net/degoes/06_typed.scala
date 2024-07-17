@@ -49,7 +49,7 @@ object executable_typed:
     * Design a data type called `CalculatedValue[A]`, whose type parameter `A` represents the type
     * of value dynamically computed from the spreadsheet.
     */
-  final case class CalculatedValue[+A]( /* ??? */ ):
+  final case class CalculatedValue[+A](value: A):
     self =>
 
     /** EXERCISE 2
@@ -57,7 +57,8 @@ object executable_typed:
       * Add an operator that returns a new `CalculatedValue` that is the negated version of this
       * one.
       */
-    def unary_-[A1 >: A](using Numeric[A1]): CalculatedValue[A1] = ???
+    def unary_-[A1 >: A](using Numeric[A1]): CalculatedValue[A1] = CalculatedValue:
+      summon[Numeric[A1]].negate(value)
 
     /** EXERCISE 3
       *
@@ -65,7 +66,8 @@ object executable_typed:
       * calculated values.
       */
     def +[A1 >: A](that: CalculatedValue[A1])(using Numeric[A1]): CalculatedValue[A1] =
-      ???
+      CalculatedValue:
+        summon[Numeric[A1]].plus(value, that.value)
 
     /** EXERCISE 4
       *
@@ -73,12 +75,14 @@ object executable_typed:
       * two calculated values.
       */
     def -[A1 >: A](that: CalculatedValue[A1])(using Numeric[A1]): CalculatedValue[A1] =
-      ???
+      CalculatedValue:
+        summon[Numeric[A1]].minus(value, that.value)
 
     protected def binaryOp[A1 >: A](that: CalculatedValue[A1])(error: String)(
       f: PartialFunction[(A1, A1), A1]
     ): CalculatedValue[A1] = ???
   end CalculatedValue
+
   object CalculatedValue:
 
     /** EXERCISE 5
